@@ -81,4 +81,25 @@ router.put('/:id/reorder', protect, adminOnly, async (req, res) => {
   }
 });
 
+// POST /api/inventory/purchase-order
+router.post('/purchase-order', protect, adminOnly, async (req, res) => {
+  try {
+    const { productId, quantity, supplierId } = req.body;
+    if (!productId || !quantity || quantity <= 0) {
+      return res.status(400).json({ message: 'Product and a valid quantity are required' });
+    }
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+
+    product.stock += Number(quantity);
+    if (supplierId) {
+      product.supplier = supplierId;
+    }
+    await product.save();
+    res.json({ message: `Purchase order completed successfully. Added ${quantity} units to ${product.name}.`, product });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;

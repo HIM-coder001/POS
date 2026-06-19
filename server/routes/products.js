@@ -56,6 +56,21 @@ router.post('/', protect, adminOnly, async (req, res) => {
   }
 });
 
+// POST /api/products/bulk-import
+router.post('/bulk-import', protect, adminOnly, async (req, res) => {
+  try {
+    const { products } = req.body;
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ message: 'A list of products is required for bulk import' });
+    }
+    const inserted = await Product.insertMany(products);
+    res.status(201).json({ message: `Successfully imported ${inserted.length} products`, products: inserted });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+
 // PUT /api/products/:id
 router.put('/:id', protect, adminOnly, async (req, res) => {
   try {
