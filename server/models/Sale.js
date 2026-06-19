@@ -19,10 +19,15 @@ const saleSchema = new mongoose.Schema({
   grandTotal: { type: Number, required: true },
   paymentMethod: {
     type: String,
-    enum: ['cash', 'card', 'mpesa'],
+    enum: ['cash', 'card', 'mpesa', 'split'],
     required: true,
   },
   mpesaRef: { type: String }, // M-Pesa transaction reference
+  splitPayments: [{
+    method: { type: String, enum: ['cash', 'card', 'mpesa'] },
+    amount: { type: Number, required: true },
+    ref: { type: String }
+  }],
   cashier: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   cashierName: String,
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
