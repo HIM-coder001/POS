@@ -1,0 +1,125 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  html { font-family: 'Inter', sans-serif; }
+  body { background-color: #f7f9fb; color: #191c1e; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #c5c5d3; border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: #757682; }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-on-primary px-lg py-sm rounded-xl font-semibold text-body-sm
+           hover:bg-primary-container hover:shadow-card-hover active:scale-[0.98]
+           transition-all duration-200 flex items-center gap-sm disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply bg-surface-container-high text-on-surface px-lg py-sm rounded-xl font-semibold text-body-sm
+           hover:bg-surface-container-highest active:scale-[0.98] transition-all duration-200 flex items-center gap-sm;
+  }
+  .btn-ghost {
+    @apply text-primary px-lg py-sm rounded-xl font-semibold text-body-sm
+           hover:bg-primary/10 active:scale-[0.98] transition-all duration-200 flex items-center gap-sm;
+  }
+  .card {
+    @apply bg-surface-container-lowest rounded-xl shadow-card border border-outline-variant/30
+           hover:shadow-card-hover transition-all duration-200;
+  }
+  .input {
+    @apply w-full px-md py-sm rounded-lg border border-outline-variant bg-surface-container-lowest
+           text-body-sm text-on-surface placeholder:text-outline
+           focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary
+           transition-all duration-200;
+  }
+  .label {
+    @apply block text-label-sm font-mono text-on-surface-variant uppercase tracking-wider mb-unit;
+  }
+  .badge-green {
+    @apply inline-flex items-center px-sm py-unit bg-tertiary-fixed/20 text-on-tertiary-fixed-variant
+           rounded-full text-xs font-bold;
+  }
+  .badge-red {
+    @apply inline-flex items-center px-sm py-unit bg-error-container text-on-error-container
+           rounded-full text-xs font-bold;
+  }
+  .badge-blue {
+    @apply inline-flex items-center px-sm py-unit bg-secondary-container text-on-secondary-container
+           rounded-full text-xs font-bold;
+  }
+  .badge-amber {
+    @apply inline-flex items-center px-sm py-unit bg-yellow-100 text-yellow-800
+           rounded-full text-xs font-bold;
+  }
+  .nav-item {
+    @apply flex items-center gap-md px-md py-md text-on-surface-variant hover:text-primary
+           hover:bg-surface-container-high transition-all duration-200 rounded-r-lg cursor-pointer text-body-sm;
+  }
+  .nav-item-active {
+    @apply flex items-center gap-md px-md py-md text-primary font-bold
+           border-l-4 border-primary bg-secondary-container/10 cursor-pointer text-body-sm;
+  }
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    vertical-align: middle;
+  }
+  .kpi-card {
+    @apply card p-lg flex flex-col gap-sm cursor-default;
+  }
+  .table-head {
+    @apply bg-surface-container-low text-on-surface-variant text-xs font-mono uppercase tracking-wider;
+  }
+  .table-row {
+    @apply border-b border-outline-variant/20 hover:bg-surface-container-low transition-colors duration-150;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+@media print {
+  body {
+    background: white !important;
+  }
+  /* Hide all app elements except the receipt */
+  body > * {
+    display: none !important;
+  }
+  /* Explicitly display and style print container */
+  #print-receipt-container {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 80mm !important; /* Standard receipt roll size */
+    margin: 0 !important;
+    padding: 8mm !important;
+    background: white !important;
+    color: black !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+  }
+  #print-receipt-container * {
+    color: black !important;
+    background: transparent !important;
+    border-color: black !important;
+  }
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+}
