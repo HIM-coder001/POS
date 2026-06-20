@@ -38,6 +38,10 @@ app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/mpesa', require('./routes/mpesa'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/categories', require('./routes/categories'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/stock-movements', require('./routes/stockMovements'));
+app.use('/api/suppliers', require('./routes/suppliers'));
 
 // 404 handler
 app.use((req, res) => {

@@ -18,7 +18,10 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('retailedge_user');
-      window.location.href = '/';
+      // Only redirect if not already on the login page — prevents redirect loops
+      if (window.location.pathname !== '/') {
+        window.location.href = '/';
+      }
     }
     return Promise.reject(error);
   }
