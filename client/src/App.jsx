@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { SettingsProvider } from './context/SettingsContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -18,6 +20,8 @@ import Profile from './pages/Profile';
 export default function App() {
   return (
     <AuthProvider>
+      <ThemeProvider>
+      <SettingsProvider>
       <CartProvider>
         <BrowserRouter>
           <Toaster
@@ -51,6 +55,8 @@ export default function App() {
           </Routes>
         </BrowserRouter>
       </CartProvider>
+      </SettingsProvider>
+      </ThemeProvider>
     </AuthProvider>
   );
 }

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import Sidebar from '../components/Sidebar';
+import { PageLayout } from '../components/ui';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+
+const fmt = (n) => `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 
 export default function Finance() {
   const [loading, setLoading] = useState(false);
@@ -160,17 +162,12 @@ export default function Finance() {
   const fmt = (n) => `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-gutter gap-gutter">
-        <header className="flex-shrink-0">
-          <h2 className="text-headline-md font-bold text-primary">Finance & Register Reconciliation</h2>
-          <p className="text-body-sm text-on-surface-variant">Perform daily cash drawer count, audit payment methods, and close register session.</p>
-        </header>
-
-        {loading ? (
-          <div className="py-xl text-center text-on-surface-variant animate-pulse">Loading financials...</div>
-        ) : (
+    <PageLayout title="Finance" subtitle="Daily cash reconciliation and register audit">
+      {loading ? (
+        <div className="flex items-center justify-center py-2xl">
+          <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
+        </div>
+      ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
             {/* LEFT: Expected Cash & Payment Audit */}
             <div className="lg:col-span-2 space-y-gutter">
@@ -311,7 +308,7 @@ export default function Finance() {
                     {actualCash && (
                       <div className="flex justify-between">
                         <span>Variance:</span>
-                        <span className={`font-bold ${Number(actualCash) - stats.cashSales === 0 ? 'text-success' : Number(actualCash) - stats.cashSales > 0 ? 'text-success' : 'text-error'}`}>
+                        <span className={`font-bold ${Number(actualCash) - stats.cashSales === 0 ? 'text-emerald-600' : Number(actualCash) - stats.cashSales > 0 ? 'text-emerald-600' : 'text-error'}`}>
                           {fmt(Number(actualCash) - stats.cashSales)}
                         </span>
                       </div>
@@ -327,47 +324,46 @@ export default function Finance() {
         )}
 
         {/* Closing Audit Logs */}
-        <div className="card p-xl bg-surface-container-lowest flex-1 overflow-hidden flex flex-col min-h-[300px]">
-          <h3 className="text-title-md font-bold text-on-surface mb-lg flex-shrink-0">Register Closing Logs</h3>
-          <div className="flex-grow overflow-y-auto">
+        <div className="card overflow-hidden">
+          <div className="px-xl py-lg border-b border-black/[0.05]">
+            <h3 className="text-title-md font-bold text-on-surface">Register Closing Logs</h3>
+          </div>
+          <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-surface-container border-b border-outline-variant/30 text-on-surface-variant text-[11px] font-bold uppercase tracking-wider">
+              <thead className="table-head">
+                <tr>
                   <th className="px-lg py-md">Closing Time</th>
                   <th className="px-lg py-md">Expected Cash</th>
                   <th className="px-lg py-md">Actual Counted</th>
                   <th className="px-lg py-md">Variance</th>
                   <th className="px-lg py-md">Audited By</th>
-                  <th className="px-lg py-md text-right">Audit Status</th>
+                  <th className="px-lg py-md text-right">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-outline-variant/10 text-body-sm font-mono">
+              <tbody className="divide-y divide-black/[0.04] font-mono text-body-sm">
                 {reconciliationLog.map(log => (
-                  <tr key={log.id}>
-                    <td className="px-lg py-md font-sans text-xs">{log.date}</td>
+                  <tr key={log.id} className="table-row">
+                    <td className="px-lg py-md font-sans text-[12px]">{log.date}</td>
                     <td className="px-lg py-md">{fmt(log.expected)}</td>
                     <td className="px-lg py-md">{fmt(log.actual)}</td>
-                    <td className={`px-lg py-md font-bold ${log.variance === 0 ? 'text-success' : log.variance > 0 ? 'text-success' : 'text-error'}`}>
+                    <td className={`px-lg py-md font-bold ${log.variance === 0 ? 'text-emerald-600' : log.variance > 0 ? 'text-emerald-600' : 'text-error'}`}>
                       {fmt(log.variance)}
                     </td>
-                    <td className="px-lg py-md font-sans text-xs text-on-surface-variant">{log.auditedBy || 'System/Self'}</td>
+                    <td className="px-lg py-md font-sans text-[12px] text-on-surface-variant">{log.auditedBy || 'System/Self'}</td>
                     <td className="px-lg py-md text-right">
-                      <span className={`px-md py-0.5 rounded font-sans text-xs font-bold ${log.status === 'Balanced' ? 'bg-success/15 text-success' : log.status === 'Surplus' ? 'bg-success/15 text-success' : 'bg-error/15 text-error'}`}>
+                      <span className={`badge ${log.status === 'Balanced' || log.status === 'Surplus' ? 'badge-green' : 'badge-red'}`}>
                         {log.status}
                       </span>
                     </td>
                   </tr>
                 ))}
                 {!reconciliationLog.length && (
-                  <tr>
-                    <td colSpan="6" className="text-center py-xl text-on-surface-variant font-sans">No closing records logged</td>
-                  </tr>
+                  <tr><td colSpan={6} className="px-lg py-2xl text-center text-on-surface-variant font-sans">No closing records yet</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
-      </div>
-    </div>
+      </PageLayout>
   );
 }

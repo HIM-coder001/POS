@@ -1,135 +1,172 @@
 import { useState } from 'react';
-import Sidebar from '../components/Sidebar';
+import { PageLayout } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
+const ROLE_STYLE = {
+  admin:   'badge-red',
+  manager: 'badge-blue',
+  cashier: 'badge-green',
+};
+
 export default function Profile() {
   const { user } = useAuth();
   const [form, setForm] = useState({
-    name: user?.name || '',
-    email: user?.email || '',
-    password: '',
+    name:            user?.name || '',
+    email:           user?.email || '',
+    password:        '',
     confirmPassword: '',
   });
+  const [avatar, setAvatar]   = useState(user?.avatar || '');
   const [loading, setLoading] = useState(false);
+  const sf = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) return toast.error('Image must be under 2MB');
+    const reader = new FileReader();
+    reader.onload = ev => setAvatar(ev.target.result);
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (form.password && form.password !== form.confirmPassword) {
+    if (form.password && form.password !== form.confirmPassword)
       return toast.error('Passwords do not match');
-    }
-
+    if (form.password && form.password.length < 6)
+      return toast.error('Password must be at least 6 characters');
     setLoading(true);
     try {
       const payload = { name: form.name, email: form.email };
       if (form.password) payload.password = form.password;
-
-      const { data } = await api.put('/api/auth/profile', payload);
-      
-      // Update local storage user profile
-      const localData = JSON.parse(localStorage.getItem('retailedge_user') || '{}');
-      const updatedUser = { ...localData, ...data };
-      localStorage.setItem('retailedge_user', JSON.stringify(updatedUser));
-      
-      // We manually update context user (or just refresh the page)
-      toast.success('Profile updated successfully! Refreshing...');
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      if (avatar !== user?.avatar) payload.avatar = avatar;
+      const { data } = await api.put('/auth/profile', payload);
+      const local = JSON.parse(localStorage.getItem('retailedge_user') || '{}');
+      localStorage.setItem('retailedge_user', JSON.stringify({ ...local, ...data }));
+      toast.success('Profile updated successfully!');
+      // clear password fields
+      setForm(p => ({ ...p, password: '', confirmPassword: '' }));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to update profile');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
+  const initials = (form.name || user?.name || 'U')[0]?.toUpperCase();
+
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-gutter">
-        <header className="mb-lg">
-          <h2 className="text-headline-md font-bold text-primary">User Profile</h2>
-          <p className="text-body-sm text-on-surface-variant">Manage your account details and password settings.</p>
-        </header>
+    <PageLayout title="Profile" subtitle="Manage your account and credentials">
+      <div className="max-w-3xl space-y-[20px]">
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
-          {/* LEFT: Info card */}
-          <div className="card p-xl bg-surface-container-lowest flex flex-col items-center text-center">
-            <div className="w-24 h-24 rounded-full bg-primary/10 border-4 border-primary/20 flex items-center justify-center text-primary font-black text-3xl mb-md">
-              {user?.name?.[0] || 'U'}
+        {/* ── Top identity card ── */}
+        <div className="bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] p-[24px]">
+          <div className="flex items-center gap-[20px]">
+            {/* Avatar */}
+            <div className="flex-shrink-0 flex flex-col items-center gap-[8px]">
+              <div className="w-[80px] h-[80px] rounded-2xl overflow-hidden bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center shadow-sm ring-2 ring-primary/20">
+                {avatar
+                  ? <img src={avatar} alt="avatar" className="w-full h-full object-cover" />
+                  : <span className="text-white font-black text-[32px]">{initials}</span>}
+              </div>
+              <label className="inline-flex items-center gap-[4px] text-[11px] font-semibold text-primary bg-primary/[0.07] hover:bg-primary/[0.12] px-[10px] py-[5px] rounded-lg cursor-pointer transition-colors">
+                <span className="material-symbols-outlined" style={{fontSize:'13px'}}>photo_camera</span>
+                Change Photo
+                <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+              </label>
+              {avatar && (
+                <button type="button" onClick={() => setAvatar('')}
+                  className="text-[11px] text-error hover:underline">
+                  Remove
+                </button>
+              )}
             </div>
-            <h3 className="text-title-lg font-bold text-on-surface">{user?.name}</h3>
-            <p className="text-body-sm text-on-surface-variant capitalize mt-unit">{user?.role}</p>
-            <div className="border-t border-outline-variant/30 w-full my-md" />
-            <div className="w-full text-left space-y-md">
-              <div>
-                <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">Email Address</p>
-                <p className="text-body-sm font-medium font-mono truncate">{user?.email}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">Current Branch</p>
-                <p className="text-body-sm font-medium">{user?.branch}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">Account Status</p>
-                <p className="text-xs font-semibold text-success flex items-center gap-unit mt-unit">
-                  <span className="w-2 h-2 rounded-full bg-success"></span>
-                  Active
-                </p>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-[18px] font-bold text-on-surface leading-tight truncate">{user?.name}</h2>
+              <p className="text-[13px] text-on-surface-variant/60 font-mono mt-[2px] truncate">{user?.email}</p>
+              <div className="flex items-center gap-[8px] mt-[8px] flex-wrap">
+                <span className={`badge ${ROLE_STYLE[user?.role] || 'badge-gray'}`}>{user?.role}</span>
+                <span className="badge badge-green">Active</span>
+                {user?.branch && (
+                  <span className="inline-flex items-center gap-[4px] text-[11px] text-on-surface-variant/60">
+                    <span className="material-symbols-outlined" style={{fontSize:'13px'}}>location_on</span>
+                    {user.branch}
+                  </span>
+                )}
               </div>
             </div>
+
           </div>
+        </div>
 
-          {/* RIGHT: Edit Form */}
-          <div className="card lg:col-span-2 p-xl bg-surface-container-lowest">
-            <h3 className="text-title-md font-bold text-on-surface mb-lg">Update Profile Credentials</h3>
-            <form onSubmit={handleSubmit} className="space-y-md">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-                <div>
-                  <label className="label">Full Name</label>
-                  <input type="text" required value={form.name}
-                    onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                    className="input" />
-                </div>
-                <div>
-                  <label className="label">Email Address</label>
-                  <input type="email" required value={form.email}
-                    onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                    className="input font-mono" />
+        {/* ── Edit form ── */}
+        <div className="bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] p-[24px]">
+          <h3 className="text-[15px] font-bold text-on-surface mb-[20px]">Update Details</h3>
+          <form onSubmit={handleSubmit} className="space-y-[16px]">
+
+            {/* Name + Email */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-[14px]">
+              <div>
+                <label className="label">Full Name</label>
+                <input required value={form.name} onChange={e => sf('name', e.target.value)} className="input" />
+              </div>
+              <div>
+                <label className="label">Email Address</label>
+                <input type="email" required value={form.email}
+                  onChange={e => sf('email', e.target.value)} className="input font-mono" />
+              </div>
+            </div>
+
+            {/* Read-only fields */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-[14px]">
+              <div>
+                <label className="label">Role</label>
+                <div className="input bg-surface-container-low text-on-surface-variant/60 cursor-not-allowed capitalize">
+                  {user?.role}
                 </div>
               </div>
+              <div>
+                <label className="label">Branch</label>
+                <div className="input bg-surface-container-low text-on-surface-variant/60 cursor-not-allowed">
+                  {user?.branch || '—'}
+                </div>
+              </div>
+            </div>
 
-              <div className="border-t border-outline-variant/30 pt-md" />
-              <h4 className="text-body-md font-semibold text-primary mb-sm">Change Password</h4>
-              <p className="text-xs text-on-surface-variant mb-md">Leave blank if you do not want to update password.</p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+            {/* Divider */}
+            <div className="border-t border-black/[0.06] pt-[16px]">
+              <p className="text-[14px] font-bold text-on-surface mb-[4px]">Change Password</p>
+              <p className="text-[12px] text-on-surface-variant/55 mb-[14px]">Leave blank to keep your current password.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-[14px]">
                 <div>
                   <label className="label">New Password</label>
-                  <input type="password" minLength="6" value={form.password}
-                    placeholder="••••••••"
-                    onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-                    className="input" />
+                  <input type="password" minLength={6} value={form.password}
+                    onChange={e => sf('password', e.target.value)}
+                    placeholder="Min. 6 characters" className="input" />
                 </div>
                 <div>
                   <label className="label">Confirm New Password</label>
                   <input type="password" value={form.confirmPassword}
-                    placeholder="••••••••"
-                    onChange={e => setForm(p => ({ ...p, confirmPassword: e.target.value }))}
-                    className="input" />
+                    onChange={e => sf('confirmPassword', e.target.value)}
+                    placeholder="Repeat password" className="input" />
                 </div>
               </div>
+            </div>
 
-              <div className="pt-md flex justify-end">
-                <button type="submit" disabled={loading} className="btn-primary py-md px-lg">
-                  {loading ? 'Saving Changes...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
+            {/* Submit */}
+            <div className="flex justify-end pt-[4px]">
+              <button type="submit" disabled={loading} className="btn-primary px-[28px]">
+                {loading
+                  ? <><span className="material-symbols-outlined animate-spin" style={{fontSize:'16px'}}>progress_activity</span>Saving…</>
+                  : <><span className="material-symbols-outlined" style={{fontSize:'16px'}}>save</span>Save Changes</>}
+              </button>
+            </div>
+          </form>
         </div>
+
       </div>
-    </div>
+    </PageLayout>
   );
 }
