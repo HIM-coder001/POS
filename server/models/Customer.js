@@ -23,6 +23,9 @@ const customerSchema = new mongoose.Schema({
   lastPurchase: { type: Date },
   branch: { type: String, default: 'Nairobi Main Branch' },
   notes: { type: String },
+  // Credit / debt balance (positive = credit, negative = owes)
+  creditBalance: { type: Number, default: 0 },
+  creditLimit:   { type: Number, default: 0 },
 }, { timestamps: true });
 
 // Update tier based on points

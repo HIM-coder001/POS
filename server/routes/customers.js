@@ -61,6 +61,33 @@ router.put('/:id', protect, async (req, res) => {
   }
 });
 
+// POST /api/customers/:id/credit — add or deduct credit
+router.post('/:id/credit', protect, async (req, res) => {
+  try {
+    const { amount, note } = req.body;
+    if (amount === undefined) return res.status(400).json({ message: 'amount is required' });
+    const customer = await Customer.findById(req.params.id);
+    if (!customer) return res.status(404).json({ message: 'Customer not found' });
+    customer.creditBalance = (customer.creditBalance || 0) + Number(amount);
+    if (note) customer.notes = (customer.notes ? customer.notes + '\n' : '') + `[Credit ${amount > 0 ? '+' : ''}${amount}] ${note}`;
+    await customer.save();
+    res.json(customer);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /api/customers/:id/statement — purchase history
+router.get('/:id/statement', protect, async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.params.id).populate('purchaseHistory.saleId', 'receiptNumber status');
+    if (!customer) return res.status(404).json({ message: 'Customer not found' });
+    res.json(customer);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // DELETE /api/customers/:id
 router.delete('/:id', protect, async (req, res) => {
   try {

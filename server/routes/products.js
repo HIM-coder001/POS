@@ -35,6 +35,19 @@ router.get('/', protect, async (req, res) => {
   }
 });
 
+// GET /api/products/low-stock — items at or below reorder level
+router.get('/low-stock', protect, async (req, res) => {
+  try {
+    const items = await Product.find({
+      isActive: true,
+      $expr: { $lte: ['$stock', { $ifNull: ['$reorderLevel', 10] }] },
+    }).sort({ stock: 1 }).limit(50).select('name sku stock reorderLevel category image');
+    res.json(items);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // GET /api/products/:id
 router.get('/:id', protect, async (req, res) => {
   try {

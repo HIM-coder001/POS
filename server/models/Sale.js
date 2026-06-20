@@ -34,6 +34,8 @@ const saleSchema = new mongoose.Schema({
   customerName: String,
   branch: { type: String, default: 'Nairobi Main Branch' },
   status: { type: String, enum: ['completed', 'refunded', 'voided'], default: 'completed' },
+  refundedAt: { type: Date },
+  refundReason: { type: String },
 }, { timestamps: true });
 
 // Auto-generate receipt number

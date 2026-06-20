@@ -2,17 +2,25 @@ const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
 require('../models/Supplier'); // Register Supplier model for populate()
+const StockMovement = require('../models/StockMovement');
 const { protect, adminOnly } = require('../middleware/auth');
 
 // GET /api/inventory — list all inventory with stock levels
 router.get('/', protect, adminOnly, async (req, res) => {
   try {
-    const { warehouse, status, page = 1, limit = 20 } = req.query;
+    const { status, search, page = 1, limit = 20 } = req.query;
     const query = { isActive: true };
 
+    if (search) {
+      query.$or = [
+        { name:    { $regex: search, $options: 'i' } },
+        { sku:     { $regex: search, $options: 'i' } },
+        { barcode: { $regex: search, $options: 'i' } },
+      ];
+    }
     if (status === 'low') query.$expr = { $and: [{ $gt: ['$stock', 0] }, { $lte: ['$stock', '$reorderLevel'] }] };
     if (status === 'out') query.stock = 0;
-    if (status === 'ok') query.$expr = { $gt: ['$stock', '$reorderLevel'] };
+    if (status === 'ok')  query.$expr = { $gt: ['$stock', '$reorderLevel'] };
 
     const total = await Product.countDocuments(query);
     const products = await Product.find(query)
@@ -56,8 +64,22 @@ router.put('/:id/adjust', protect, adminOnly, async (req, res) => {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: 'Product not found' });
 
-    product.stock = Math.max(0, product.stock + adjustment);
+    const stockBefore = product.stock;
+    const adjustVal = Number(adjustment);
+    product.stock = Math.max(0, product.stock + adjustVal);
     await product.save();
+
+    await StockMovement.create({
+      product: product._id,
+      productName: product.name,
+      type: 'adjustment',
+      quantity: adjustVal,
+      balanceBefore: stockBefore,
+      balanceAfter: product.stock,
+      reason: reason || '',
+      performedBy: req.user._id,
+      performedByName: req.user.name,
+    });
 
     res.json({ message: 'Stock adjusted', product });
   } catch (error) {
@@ -91,11 +113,27 @@ router.post('/purchase-order', protect, adminOnly, async (req, res) => {
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ message: 'Product not found' });
 
-    product.stock += Number(quantity);
+    const stockBefore = product.stock;
+    const qty = Number(quantity);
+    product.stock += qty;
     if (supplierId) {
       product.supplier = supplierId;
     }
     await product.save();
+
+    const poReference = 'PO-' + Date.now();
+    await StockMovement.create({
+      product: product._id,
+      productName: product.name,
+      type: 'purchase',
+      quantity: qty,
+      balanceBefore: stockBefore,
+      balanceAfter: product.stock,
+      reference: poReference,
+      performedBy: req.user._id,
+      performedByName: req.user.name,
+    });
+
     res.json({ message: `Purchase order completed successfully. Added ${quantity} units to ${product.name}.`, product });
   } catch (error) {
     res.status(500).json({ message: error.message });
