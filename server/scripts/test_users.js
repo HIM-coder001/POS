@@ -1,8 +1,12 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
-const User = require('./models/User');
+const User = require('../models/User');
 
 const test = async () => {
+  if (process.env.NODE_ENV === 'production' && !process.argv.includes('--prod-safe')) {
+    console.error('❌ ERROR: Running test script in production is disabled unless --prod-safe is passed.');
+    process.exit(1);
+  }
   try {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('✅ Connected to DB:', mongoose.connection.name);

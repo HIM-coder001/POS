@@ -1,7 +1,7 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
-const connectDB = require('./config/db');
-const Category = require('./models/Category');
+const connectDB = require('../config/db');
+const Category = require('../models/Category');
 
 const DEFAULT_CATEGORIES = [
   { name: 'Groceries', description: 'General grocery items' },
@@ -16,6 +16,10 @@ const DEFAULT_CATEGORIES = [
 ];
 
 async function seed() {
+  if (process.env.NODE_ENV === 'production' && !process.argv.includes('--prod-safe')) {
+    console.error('❌ ERROR: Running seed script in production is disabled unless --prod-safe is passed.');
+    process.exit(1);
+  }
   await connectDB();
   let created = 0;
   for (const cat of DEFAULT_CATEGORIES) {
