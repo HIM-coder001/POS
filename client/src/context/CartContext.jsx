@@ -1,32 +1,48 @@
-import { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import toast from 'react-hot-toast';
 
 const CartContext = createContext(null);
 const VAT_RATE = 0.16;
 
+const CART_KEY        = 'retailedge_cart';
+const HELD_SALES_KEY  = 'retailedge_held_sales';
+
+/** Safely read from localStorage — returns fallback on parse error */
+const readLS = (key, fallback) => {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+  catch { return fallback; }
+};
+
+/** Safely write to localStorage — silently fails if storage is full */
+const writeLS = (key, value) => {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+};
+
 export const CartProvider = ({ children }) => {
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState(() => readLS(CART_KEY, []));
   const [discount, setDiscount] = useState(0);
 
   // Keep a ref that always mirrors the latest items state so callbacks
   // can read the true current value without stale-closure issues.
   const itemsRef = useRef(items);
+
   const _setItems = (updater) => {
     setItems(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       itemsRef.current = next;
+      writeLS(CART_KEY, next); // persist on every change
       return next;
     });
   };
 
-  const [heldSales, setHeldSales] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('retailedge_held_sales') || '[]'); }
-    catch { return []; }
-  });
+  // Sync ref on initial load (items come from localStorage)
+  useEffect(() => {
+    itemsRef.current = items;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [heldSales, setHeldSales] = useState(() => readLS(HELD_SALES_KEY, []));
 
   // ── addItem ───────────────────────────────────────────────────────────────
-  // Uses itemsRef so rapid repeated clicks all see the most-recent quantity,
-  // not a stale closure snapshot.
   const addItem = useCallback((product) => {
     const current = itemsRef.current;
     const existing = current.find(i => i._id === product._id);
@@ -38,20 +54,20 @@ export const CartProvider = ({ children }) => {
         );
         return;
       }
-      // Increment — update ref immediately so the next rapid click sees the new qty
       const newQty = existing.quantity + 1;
       itemsRef.current = current.map(i =>
         i._id === product._id ? { ...i, quantity: newQty } : i
       );
       setItems(itemsRef.current);
+      writeLS(CART_KEY, itemsRef.current);
       toast.success(`${product.name} ×${newQty}`);
     } else {
-      // New item
       itemsRef.current = [...current, { ...product, quantity: 1 }];
       setItems(itemsRef.current);
+      writeLS(CART_KEY, itemsRef.current);
       toast.success(`${product.name} added`);
     }
-  }, []); // no deps — reads from ref, never stale
+  }, []);
 
   // ── removeItem ────────────────────────────────────────────────────────────
   const removeItem = useCallback((id) => {
@@ -66,14 +82,13 @@ export const CartProvider = ({ children }) => {
     if (!item) return;
 
     if (qty > item.stock) {
-      toast.error(
-        `Only ${item.stock} unit${item.stock !== 1 ? 's' : ''} in stock for "${item.name}"`
-      );
+      toast.error(`Only ${item.stock} unit${item.stock !== 1 ? 's' : ''} in stock for "${item.name}"`);
       return;
     }
 
     itemsRef.current = current.map(i => i._id === id ? { ...i, quantity: qty } : i);
     setItems(itemsRef.current);
+    writeLS(CART_KEY, itemsRef.current);
   }, []);
 
   // ── clearCart ─────────────────────────────────────────────────────────────
@@ -81,6 +96,7 @@ export const CartProvider = ({ children }) => {
     itemsRef.current = [];
     setItems([]);
     setDiscount(0);
+    writeLS(CART_KEY, []);
   }, []);
 
   // ── holdCurrentSale ───────────────────────────────────────────────────────
@@ -96,12 +112,13 @@ export const CartProvider = ({ children }) => {
     };
     setHeldSales(prev => {
       const updated = [newHold, ...prev];
-      try { localStorage.setItem('retailedge_held_sales', JSON.stringify(updated)); } catch {}
+      writeLS(HELD_SALES_KEY, updated);
       return updated;
     });
     itemsRef.current = [];
     setItems([]);
     setDiscount(0);
+    writeLS(CART_KEY, []);
   }, [discount]);
 
   // ── resumeSale ────────────────────────────────────────────────────────────
@@ -112,8 +129,9 @@ export const CartProvider = ({ children }) => {
       itemsRef.current = sale.items;
       setItems(sale.items);
       setDiscount(sale.discount);
+      writeLS(CART_KEY, sale.items);
       const updated = prev.filter(s => s.id !== heldId);
-      try { localStorage.setItem('retailedge_held_sales', JSON.stringify(updated)); } catch {}
+      writeLS(HELD_SALES_KEY, updated);
       return updated;
     });
   }, []);
@@ -122,15 +140,15 @@ export const CartProvider = ({ children }) => {
   const deleteHeldSale = useCallback((heldId) => {
     setHeldSales(prev => {
       const updated = prev.filter(s => s.id !== heldId);
-      try { localStorage.setItem('retailedge_held_sales', JSON.stringify(updated)); } catch {}
+      writeLS(HELD_SALES_KEY, updated);
       return updated;
     });
   }, []);
 
   // ── Derived totals ────────────────────────────────────────────────────────
-  const subtotal  = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const vatAmount = subtotal * VAT_RATE;
-  const grandTotal = subtotal + vatAmount - discount;
+  const subtotal   = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const vatAmount  = subtotal * VAT_RATE;
+  const grandTotal = Math.max(0, subtotal + vatAmount - discount);
 
   return (
     <CartContext.Provider value={{
