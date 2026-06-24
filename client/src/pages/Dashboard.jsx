@@ -5,7 +5,7 @@ import TopNav from '../components/TopNav';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts';
 
@@ -135,10 +135,9 @@ export default function Dashboard() {
           subtitle={new Date().toLocaleDateString('en-KE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
         />
 
-        <main className="flex-1 overflow-y-auto px-[24px] pt-[20px] pb-[32px] space-y-[20px]">
-
-          {/* ── KPI row ─────────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-[14px]">
+        <main className="flex-1 overflow-hidden px-[24px] py-[20px] flex flex-col gap-[14px]">
+          {/* ── KPI row ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-[14px] flex-shrink-0">
 
             <KpiCard
               label="Today's Revenue"
@@ -198,11 +197,14 @@ export default function Dashboard() {
             </KpiCard>
           </div>
 
-          {/* ── Revenue trend + Category split ──────────────────────── */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-[14px]">
-
-            {/* Area chart — 7-day trend */}
-            <div className="xl:col-span-2 bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] p-[20px]">
+          {/* ── Main Content Grid ── */}
+          <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-3 gap-[14px]">
+            
+            {/* ── Left Column (Charts & Transactions) ── */}
+            <div className="xl:col-span-2 flex flex-col gap-[14px] min-h-0">
+              
+              {/* Area chart — 7-day trend */}
+              <div className="flex-1 min-h-0 bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] p-[20px] flex flex-col">
               <div className="flex items-start justify-between mb-[18px]">
                 <div>
                   <h3 className="text-[15px] font-bold text-on-surface">Revenue Trend</h3>
@@ -227,36 +229,73 @@ export default function Dashboard() {
                 </div>
               ) : data?.salesTrend?.length > 0 ? (
                 <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={data.salesTrend} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%"   stopColor="var(--color-primary)" stopOpacity={0.18} />
-                        <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0}    />
-                      </linearGradient>
-                    </defs>
+                  <BarChart data={data.salesTrend} maxBarSize={64} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
                     <XAxis dataKey="_id" tickLine={false} axisLine={false}
                       tick={{ fontSize: 11, fill: '#9ca3af' }}
                       tickFormatter={v => new Date(v).toLocaleDateString('en-KE', { weekday: 'short' })} />
                     <YAxis tickLine={false} axisLine={false} width={46}
                       tick={{ fontSize: 11, fill: '#9ca3af' }}
                       tickFormatter={v => fmtShort(v)} />
-                    <Tooltip content={<AreaTooltip />} cursor={{ stroke: 'rgba(0,0,0,0.06)', strokeWidth: 1 }} />
-                    <Area type="monotone" dataKey="total" name="Revenue"
-                      stroke="var(--color-primary)" strokeWidth={2}
-                      fill="url(#revGrad)" dot={false}
-                      activeDot={{ r: 5, fill: 'var(--color-primary)', strokeWidth: 0 }} />
-                  </AreaChart>
+                    <Tooltip content={<AreaTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
+                    <Bar dataKey="total" name="Revenue" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-[220px] flex flex-col items-center justify-center gap-[8px] text-on-surface-variant/30">
-                  <span className="material-symbols-outlined text-5xl">show_chart</span>
-                  <p className="text-[13px]">No sales this week</p>
+                  <div className="flex-1 flex flex-col items-center justify-center gap-[8px] text-on-surface-variant/30">
+                    <span className="material-symbols-outlined text-5xl">show_chart</span>
+                    <p className="text-[13px]">No sales this week</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Recent transactions */}
+              <div className="flex-1 min-h-0 bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] flex flex-col">
+                <div className="flex items-center justify-between px-[20px] py-[12px] border-b border-black/[0.05] flex-shrink-0">
+                  <div>
+                    <h3 className="text-[15px] font-bold text-on-surface">Recent Transactions</h3>
+                  </div>
+                  <button onClick={() => navigate('/transactions')} className="flex items-center gap-[4px] text-[12px] font-semibold text-primary hover:underline flex-shrink-0">
+                    View all <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>chevron_right</span>
+                  </button>
                 </div>
-              )}
+                
+                <div className="flex-1 overflow-y-auto divide-y divide-black/[0.04] no-scrollbar">
+                  {loading ? Array(5).fill(0).map((_, i) => (
+                    <div key={i} className="flex items-center gap-[12px] px-[20px] py-[10px]">
+                      <Sk h="h-10" w="w-10" rounded="rounded-xl" />
+                      <div className="flex-1 space-y-[6px]"><Sk h="h-3" w="w-36" /><Sk h="h-3" w="w-24" /></div>
+                      <Sk h="h-4" w="w-20" />
+                      <Sk h="h-6" w="w-16" rounded="rounded-full" />
+                    </div>
+                  )) : (data?.recentSales || []).map(s => {
+                    const pm = PAYMENT_META[s.paymentMethod] || PAYMENT_META.cash;
+                    return (
+                      <div key={s._id} className="flex items-center gap-[12px] px-[20px] py-[10px] hover:bg-[#fafbff] transition-colors">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${pm.bg}`}>
+                          <span className={`material-symbols-outlined icon-fill ${pm.text}`} style={{ fontSize: '18px' }}>{pm.icon}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-semibold text-on-surface leading-none truncate">{s.customerName || 'Walk-in'}</p>
+                          <p className="text-[11px] text-on-surface-variant/50 mt-[3px] font-mono truncate">{s.receiptNumber}</p>
+                        </div>
+                        <p className="text-[14px] font-bold text-on-surface font-mono flex-shrink-0">KES {Number(s.grandTotal || 0).toLocaleString('en-KE')}</p>
+                        <div className="flex flex-col items-end gap-[4px] flex-shrink-0">
+                          <span className={`inline-flex items-center gap-[3px] px-[8px] py-[3px] rounded-full text-[11px] font-semibold ${pm.bg} ${pm.text}`}>
+                            <span className="material-symbols-outlined icon-fill" style={{ fontSize: '11px' }}>{pm.icon}</span>{pm.label}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
-            {/* Category donut */}
-            <div className="bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] p-[20px] flex flex-col">
+            {/* ── Right Column (Stats & Alerts) ── */}
+            <div className="flex flex-col gap-[14px] min-h-0">
+              
+              {/* Category donut */}
+              <div className="bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] p-[16px] flex flex-col flex-shrink-0">
               <div className="mb-[14px]">
                 <h3 className="text-[15px] font-bold text-on-surface">Category Split</h3>
                 <p className="text-[12px] text-on-surface-variant/55 mt-[2px]">Revenue share this month</p>
@@ -297,7 +336,6 @@ export default function Dashboard() {
                               <span className="text-[12px] text-on-surface flex-1 truncate min-w-0">{c._id}</span>
                               <span className="text-[12px] font-bold text-on-surface font-mono flex-shrink-0">{pct}%</span>
                             </div>
-                            {/* progress bar */}
                             <div className="h-[3px] rounded-full bg-black/[0.05] ml-[15px]">
                               <div className="h-full rounded-full transition-all duration-500"
                                 style={{ width: `${pct}%`, background: PIE_COLORS[i % PIE_COLORS.length] }} />
@@ -314,76 +352,10 @@ export default function Dashboard() {
                   <p className="text-[13px]">No category data</p>
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* ── Bottom row ──────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-[14px]">
-
-            {/* Recent transactions */}
-            <div className="xl:col-span-2 bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] overflow-hidden">
-              <div className="flex items-center justify-between px-[20px] py-[14px] border-b border-black/[0.05]">
-                <div>
-                  <h3 className="text-[15px] font-bold text-on-surface">Recent Transactions</h3>
-                  <p className="text-[12px] text-on-surface-variant/55 mt-[1px]">Latest completed sales</p>
-                </div>
-                <button onClick={() => navigate('/transactions')}
-                  className="flex items-center gap-[4px] text-[12px] font-semibold text-primary hover:underline flex-shrink-0">
-                  View all
-                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>chevron_right</span>
-                </button>
               </div>
 
-              <div className="divide-y divide-black/[0.04]">
-                {loading ? Array(5).fill(0).map((_, i) => (
-                  <div key={i} className="flex items-center gap-[12px] px-[20px] py-[14px]">
-                    <Sk h="h-10" w="w-10" rounded="rounded-xl" />
-                    <div className="flex-1 space-y-[6px]"><Sk h="h-3" w="w-36" /><Sk h="h-3" w="w-24" /></div>
-                    <Sk h="h-4" w="w-20" />
-                    <Sk h="h-6" w="w-16" rounded="rounded-full" />
-                  </div>
-                )) : (data?.recentSales || []).map(s => {
-                  const pm = PAYMENT_META[s.paymentMethod] || PAYMENT_META.cash;
-                  return (
-                    <div key={s._id} className="flex items-center gap-[12px] px-[20px] py-[14px] hover:bg-[#fafbff] transition-colors">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${pm.bg}`}>
-                        <span className={`material-symbols-outlined icon-fill ${pm.text}`} style={{ fontSize: '18px' }}>{pm.icon}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-semibold text-on-surface leading-none truncate">
-                          {s.customerName || 'Walk-in'}
-                        </p>
-                        <p className="text-[11px] text-on-surface-variant/50 mt-[3px] font-mono truncate">{s.receiptNumber}</p>
-                      </div>
-                      <p className="text-[14px] font-bold text-on-surface font-mono flex-shrink-0">
-                        KES {Number(s.grandTotal || 0).toLocaleString('en-KE')}
-                      </p>
-                      <div className="flex flex-col items-end gap-[4px] flex-shrink-0">
-                        <span className={`inline-flex items-center gap-[3px] px-[8px] py-[3px] rounded-full text-[11px] font-semibold ${pm.bg} ${pm.text}`}>
-                          <span className="material-symbols-outlined icon-fill" style={{ fontSize: '11px' }}>{pm.icon}</span>
-                          {pm.label}
-                        </span>
-                        <span className="text-[10px] text-on-surface-variant/40 font-mono">
-                          {new Date(s.createdAt).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-                {!loading && !data?.recentSales?.length && (
-                  <div className="py-[48px] flex flex-col items-center gap-[8px] text-on-surface-variant/30">
-                    <span className="material-symbols-outlined text-5xl">receipt_long</span>
-                    <p className="text-[13px]">No transactions yet</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Right column */}
-            <div className="flex flex-col gap-[14px]">
-
-              {/* Payment method breakdown */}
-              <div className="bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] p-[18px]">
+              {/* Payment methods */}
+              <div className="flex-1 min-h-0 bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] p-[16px] flex flex-col">
                 <h3 className="text-[14px] font-bold text-on-surface mb-[1px]">Payment Methods</h3>
                 <p className="text-[12px] text-on-surface-variant/55 mb-[14px]">This month's breakdown</p>
                 {loading ? (
@@ -419,7 +391,7 @@ export default function Dashboard() {
               </div>
 
               {/* Stock alerts */}
-              <div className="bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] p-[18px] flex flex-col">
+              <div className="flex-1 min-h-0 bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] p-[16px] flex flex-col">
                 <div className="flex items-center justify-between mb-[12px]">
                   <div>
                     <h3 className="text-[14px] font-bold text-on-surface">Stock Alerts</h3>
@@ -432,7 +404,7 @@ export default function Dashboard() {
                   </button>
                 </div>
 
-                <div className="space-y-[6px] overflow-y-auto max-h-[220px] no-scrollbar">
+                <div className="flex-1 overflow-y-auto space-y-[6px] no-scrollbar">
                   {loading ? Array(3).fill(0).map((_, i) => (
                     <div key={i} className="flex items-center gap-[10px] p-[10px] rounded-xl bg-black/[0.03] animate-pulse">
                       <Sk h="h-8" w="w-8" rounded="rounded-xl" />
@@ -473,29 +445,8 @@ export default function Dashboard() {
                 )}
               </div>
 
-              {/* Quick actions */}
-              <div className="bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] p-[16px]">
-                <p className="text-[11px] font-bold text-on-surface-variant/50 uppercase tracking-[0.09em] mb-[10px]">Quick Actions</p>
-                <div className="grid grid-cols-2 gap-[8px]">
-                  {[
-                    { label: 'New Sale',  icon: 'point_of_sale', path: '/checkout',  color: 'text-primary',    bg: 'bg-primary/[0.07]' },
-                    { label: 'Products', icon: 'inventory_2',   path: '/products',  color: 'text-violet-600', bg: 'bg-violet-50'      },
-                    { label: 'Customers',icon: 'group',          path: '/customers', color: 'text-emerald-600',bg: 'bg-emerald-50'     },
-                    { label: 'Reports',  icon: 'analytics',      path: '/reports',   color: 'text-amber-600',  bg: 'bg-amber-50'       },
-                  ].map(a => (
-                    <button key={a.path} onClick={() => navigate(a.path)}
-                      className="flex flex-col items-center gap-[6px] p-[12px] rounded-xl border border-black/[0.05] hover:border-primary/20 hover:bg-surface-container-low transition-all duration-150 group">
-                      <div className={`w-9 h-9 rounded-xl ${a.bg} flex items-center justify-center group-hover:scale-[1.08] transition-transform duration-150`}>
-                        <span className={`material-symbols-outlined icon-fill ${a.color}`} style={{ fontSize: '18px' }}>{a.icon}</span>
-                      </div>
-                      <span className="text-[11px] font-semibold text-on-surface-variant">{a.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
             </div>{/* end right col */}
-          </div>{/* end bottom row */}
+          </div>{/* end main grid */}
 
         </main>
       </div>
