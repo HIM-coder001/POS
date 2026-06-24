@@ -35,6 +35,62 @@ router.get('/', protect, async (req, res) => {
   }
 });
 
+// GET /api/products/scan/:code — barcode / SKU / productId lookup for POS scanner
+// Returns full product details + current stock status
+// Priority: barcode (exact) → SKU (exact) → productId (exact)
+router.get('/scan/:code', protect, async (req, res) => {
+  try {
+    const code = req.params.code.trim();
+    if (!code) return res.status(400).json({ message: 'Scan code is required' });
+
+    // Try exact matches in priority order
+    const product = await Product.findOne({
+      isActive: true,
+      $or: [
+        { barcode:   code              },
+        { sku:       code.toUpperCase() },
+        { productId: code              },
+      ],
+    }).populate('supplier', 'name');
+
+    if (!product) {
+      return res.status(404).json({
+        message: `No product found for code: ${code}`,
+        code,
+      });
+    }
+
+    // Return structured response so the frontend knows what matched
+    res.json({
+      product: {
+        _id:         product._id,
+        productId:   product.productId,
+        sku:         product.sku,
+        barcode:     product.barcode,
+        name:        product.name,
+        category:    product.category,
+        price:       product.price,
+        costPrice:   product.costPrice,
+        stock:       product.stock,
+        reorderLevel:product.reorderLevel,
+        unit:        product.unit,
+        image:       product.image,
+        vatApplicable:product.vatApplicable,
+        stockStatus: product.stockStatus,
+        supplier:    product.supplier,
+        branch:      product.branch,
+      },
+      matchedBy: code === product.barcode ? 'barcode'
+               : code.toUpperCase() === product.sku ? 'sku'
+               : 'productId',
+      inStock:   product.stock > 0,
+      stock:     product.stock,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // GET /api/products/low-stock — items at or below reorder level
 router.get('/low-stock', protect, async (req, res) => {
   try {

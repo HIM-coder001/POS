@@ -140,4 +140,82 @@ router.post('/purchase-order', protect, adminOnly, async (req, res) => {
   }
 });
 
+// GET /api/inventory/reorder-queue — products that need restocking
+router.get('/reorder-queue', protect, adminOnly, async (req, res) => {
+  try {
+    const items = await Product.find({
+      isActive: true,
+      $expr: { $lte: ['$stock', { $ifNull: ['$reorderLevel', 10] }] },
+    })
+      .populate('supplier', 'name phone email')
+      .sort({ stock: 1 })
+      .select('name sku category stock reorderLevel costPrice price image supplier branch');
+
+    const outOfStock = items.filter(p => p.stock === 0);
+    const lowStock   = items.filter(p => p.stock > 0);
+
+    res.json({
+      total:      items.length,
+      outOfStock: outOfStock.length,
+      lowStock:   lowStock.length,
+      items,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/inventory/auto-reorder — create purchase orders for all flagged products
+router.post('/auto-reorder', protect, adminOnly, async (req, res) => {
+  try {
+    const { items } = req.body; // [{ productId, quantity }]
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: 'Items array is required' });
+    }
+
+    const results = [];
+    const errors  = [];
+
+    for (const { productId, quantity } of items) {
+      try {
+        const product = await Product.findById(productId);
+        if (!product) { errors.push({ productId, error: 'Not found' }); continue; }
+
+        const qty = Number(quantity) || (product.reorderLevel * 2);
+        if (qty <= 0) { errors.push({ productId, error: 'Invalid quantity' }); continue; }
+
+        const stockBefore = product.stock;
+        product.stock += qty;
+        await product.save();
+
+        const poReference = 'AUTO-PO-' + Date.now() + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
+        await StockMovement.create({
+          product:         product._id,
+          productName:     product.name,
+          type:            'purchase',
+          quantity:        qty,
+          balanceBefore:   stockBefore,
+          balanceAfter:    product.stock,
+          reference:       poReference,
+          reason:          'Auto-reorder',
+          performedBy:     req.user._id,
+          performedByName: req.user.name,
+        });
+
+        results.push({ productId, name: product.name, added: qty, newStock: product.stock, reference: poReference });
+      } catch (err) {
+        errors.push({ productId, error: err.message });
+      }
+    }
+
+    res.json({
+      message:   `Auto-reorder completed: ${results.length} restocked, ${errors.length} failed.`,
+      restocked: results,
+      errors,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;
