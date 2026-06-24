@@ -345,7 +345,8 @@ function OtpStep({ otpData, onBack, onVerified }) {
     return ()=>clearInterval(id);
   }, []);
 
-  useEffect(() => { if(otpData?.devOtp) setOtp(String(otpData.devOtp).split('')); },[otpData?.devOtp]);
+  // In dev, the OTP is shown on screen, but we force the user to type it to simulate production
+  // useEffect(() => { if(otpData?.devOtp) setOtp(String(otpData.devOtp).split('')); },[otpData?.devOtp]);
 
   const handleChange=(i,val)=>{
     if(!/^\d*$/.test(val))return;
