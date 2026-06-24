@@ -3,7 +3,7 @@ import Sidebar from '../components/Sidebar';
 import TopNav from '../components/TopNav';
 import api from '../services/api';
 import toast from 'react-hot-toast';
-import { useTheme, COLOR_PRESETS } from '../context/ThemeContext';
+import { useTheme, COLOR_PRESETS, resolveColorName } from '../context/ThemeContext';
 import { useSettings } from '../context/SettingsContext';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -31,7 +31,6 @@ const SECTION_GROUPS = [
     { key:'receipt',   label:'Receipt',           icon:'receipt_long'         },
     { key:'numbering', label:'Numbering',         icon:'tag'                  },
     { key:'suppliers', label:'Suppliers',         icon:'local_shipping'       },
-    { key:'plan',      label:'Plan',              icon:'workspace_premium'    },
   ]},
 ];
 
@@ -380,6 +379,9 @@ export default function Settings() {
     allowDiscounts:true, requireCustomerOnSale:false, allowRefunds:true,
     receiptPrefix:'POS', receiptNextNum:1,
     brandColor:'#00236f', brandColorName:'Navy Blue',
+    receiptPhone:'', receiptAddress:'',
+    receiptFontType:'Arial', receiptFontSize:'medium',
+    receiptShowTaxBreakdown:false, receiptShowServedBy:true, receiptShowDateTime:true,
   });
   const sb = (k, v) => setBiz(p => ({ ...p, [k]: v }));
 
@@ -417,9 +419,7 @@ export default function Settings() {
     cashier: { label:'Cashier', color:'bg-green-50 text-green-700', perms:['POS Checkout only','View own transactions','Update profile'] },
   };
 
-  // Plan state
-  const PLAN = { name:'Growth', price:'KES 2,500/mo', users:10, branches:3, features:['Unlimited products','M-Pesa integration','Advanced reports','Audit trail','Multi-branch','Priority support'] };
-
+  // Plan state removed
   useEffect(() => {
     api.get('/settings')
       .then(({ data }) => {
@@ -437,6 +437,13 @@ export default function Settings() {
       })
       .catch(() => toast.error('Failed to load settings'))
       .finally(() => setFetching(false));
+  }, []);
+
+  // Req 5.7: On load, if brandColorName is empty/absent, resolve from brandColor
+  useEffect(() => {
+    if (!biz.brandColorName) {
+      sb('brandColorName', resolveColorName(biz.brandColor, COLOR_PRESETS));
+    }
   }, []);
 
   const fetchUsers = useCallback(async () => {
@@ -624,44 +631,69 @@ export default function Settings() {
               {/* ══ BRANDING ══════════════════════════════════════════════ */}
               {active === 'branding' && (<>
                 <SectionCard icon="palette" title="Branding" subtitle="Logo, colours and store appearance.">
-                  <div className="space-y-[24px] max-w-xl">
-
-                    {/* Logo upload */}
-                    <div>
-                      <label className="label">Business Logo</label>
-                      <div className="flex items-center gap-[16px]">
+                  <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-[32px] items-start">
+                    
+                    <div className="space-y-[24px]">
+                      {/* Logo upload */}
+                      <div>
+                      <label className="label text-center block">Business Logo</label>
+                      <div className="flex flex-col items-center gap-[16px] text-center mt-[8px]">
                         <div className="w-20 h-20 rounded-xl border-2 border-dashed border-outline-variant flex items-center justify-center bg-surface-container-low overflow-hidden flex-shrink-0">
-                          {biz.logoUrl
+                          {biz.logoUploading
+                            ? <span className="material-symbols-outlined animate-spin text-primary text-2xl">progress_activity</span>
+                            : biz.logoUrl
                             ? <img src={biz.logoUrl} alt="logo" className="w-full h-full object-cover" />
                             : <span className="material-symbols-outlined text-on-surface-variant/40 text-3xl">image</span>}
                         </div>
                         <div className="space-y-[8px]">
-                          <label className="btn-secondary cursor-pointer text-[12px] py-[7px]">
+                          <label className={`btn-secondary cursor-pointer text-[12px] py-[7px] ${biz.logoUploading ? 'opacity-50 pointer-events-none' : ''}`}>
                             <span className="material-symbols-outlined" style={{fontSize:'16px'}}>upload</span>
-                            Upload Logo
+                            {biz.logoUploading ? 'Uploading…' : 'Upload Logo'}
                             <input type="file" accept="image/*" className="hidden"
-                              onChange={e => {
+                              onChange={async e => {
                                 const file = e.target.files[0];
                                 if (!file) return;
+                                if (file.size > 5 * 1024 * 1024) return toast.error('Image must be under 5MB');
                                 const reader = new FileReader();
-                                reader.onload = ev => sb('logoUrl', ev.target.result);
+                                reader.onload = async ev => {
+                                  sb('logoUploading', true);
+                                  try {
+                                    const { data } = await api.post('/upload/image', {
+                                      data: ev.target.result,
+                                      folder: 'retailedge/logos',
+                                    });
+                                    sb('logoUrl', data.url);
+                                    sb('logoUploading', false);
+                                    toast.success('Logo uploaded!');
+                                  } catch (err) {
+                                    toast.error(err.response?.data?.message || 'Upload failed');
+                                    sb('logoUploading', false);
+                                  }
+                                };
                                 reader.readAsDataURL(file);
                               }} />
                           </label>
-                          {biz.logoUrl && <button onClick={() => sb('logoUrl', '')} className="text-[12px] text-error hover:underline block">Remove logo</button>}
-                          <p className="text-[11px] text-on-surface-variant/50">PNG or JPG. Max 2MB. Recommended: 200×200px.</p>
+                          {biz.logoUrl && !biz.logoUploading && (
+                            <button onClick={() => sb('logoUrl', '')} className="text-[12px] text-error hover:underline block">Remove logo</button>
+                          )}
+                          <p className="text-[11px] text-on-surface-variant/50">PNG or JPG · Max 5MB · Hosted on Cloudinary</p>
                         </div>
                       </div>
                     </div>
 
                     {/* Store name display */}
-                    <div><label className="label">Display Name (shown on receipts & sidebar)</label>
+                    <div className="pt-[16px] border-t border-black/[0.05]">
+                      <label className="label">Display Name</label>
                       <input value={biz.name} onChange={e => sb('name', e.target.value)} className="input"
-                        placeholder="Your Business Name" /></div>
+                        placeholder="Your Business Name" />
+                      <p className="text-[11px] text-on-surface-variant/50 mt-[4px]">Shown on receipts & sidebar</p>
+                    </div>
+                    </div>
 
-                    {/* ── Brand Colour ── */}
-                    <div>
-                      <label className="label">Brand Colour</label>
+                    <div className="space-y-[24px]">
+                      {/* ── Brand Colour ── */}
+                      <div>
+                        <label className="label">Brand Colour</label>
                       <p className="text-[12px] text-on-surface-variant/60 mb-[14px]">
                         Changes apply instantly across the entire interface — buttons, nav, highlights and more.
                       </p>
@@ -687,36 +719,39 @@ export default function Settings() {
                         </div>
                         <div className="px-[16px] py-[12px] bg-surface-container-low flex items-center gap-[8px]">
                           <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ background: biz.brandColor }} />
-                          <span className="text-[12px] text-on-surface-variant font-mono">{biz.brandColor}</span>
-                          <span className="text-[12px] text-on-surface-variant/60">·</span>
-                          <span className="text-[12px] text-on-surface-variant/70">{biz.brandColorName || 'Custom'}</span>
+                          <span className="text-[12px] text-on-surface-variant/70">{resolveColorName(biz.brandColor, COLOR_PRESETS)}</span>
                         </div>
                       </div>
 
                       {/* Colour presets grid */}
                       <div className="mb-[16px]">
                         <p className="text-[11px] font-semibold text-on-surface-variant/60 uppercase tracking-[0.07em] mb-[10px]">Preset Colours</p>
-                        <div className="flex flex-wrap gap-[8px]">
-                          {COLOR_PRESETS.map(p => {
-                            const isActive = biz.brandColor === p.hex;
+                        <div className="flex flex-wrap gap-[10px]">
+                          {COLOR_PRESETS.map(preset => {
+                            const isActive = biz.brandColor.toLowerCase() === preset.hex.toLowerCase();
                             return (
-                              <button key={p.hex} title={p.name}
+                              <button key={preset.hex} title={preset.name}
                                 onClick={() => {
-                                  sb('brandColor', p.hex);
-                                  sb('brandColorName', p.name);
-                                  setThemeColor(p.hex, p.name);
+                                  sb('brandColor', preset.hex);
+                                  sb('brandColorName', preset.name);
+                                  setThemeColor(preset.hex, preset.name);
                                 }}
-                                className={`w-9 h-9 rounded-xl transition-all duration-150 flex-shrink-0 relative
-                                  ${isActive ? 'ring-2 ring-offset-2 scale-[1.12]' : 'hover:scale-[1.08] hover:shadow-md'}`}
-                                style={{
-                                  background: p.hex,
-                                  ringColor: p.hex,
-                                  boxShadow: isActive ? `0 0 0 2px white, 0 0 0 4px ${p.hex}` : undefined,
-                                }}>
-                                {isActive && (
-                                  <span className="material-symbols-outlined text-white icon-fill absolute inset-0 flex items-center justify-center"
-                                    style={{fontSize:'16px', display:'flex'}}>check</span>
-                                )}
+                                className="flex flex-col items-center gap-[5px] group focus:outline-none">
+                                <div
+                                  className={`w-9 h-9 rounded-xl transition-all duration-150 flex-shrink-0 relative
+                                    ${isActive ? 'scale-[1.12]' : 'hover:scale-[1.08] hover:shadow-md'}`}
+                                  style={{
+                                    background: preset.hex,
+                                    boxShadow: isActive ? `0 0 0 2px white, 0 0 0 4px ${preset.hex}` : undefined,
+                                  }}>
+                                  {isActive && (
+                                    <span className="material-symbols-outlined text-white icon-fill absolute inset-0 flex items-center justify-center"
+                                      style={{fontSize:'16px', display:'flex'}}>check</span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] text-on-surface-variant/70 group-hover:text-on-surface transition-colors leading-tight text-center max-w-[48px]">
+                                  {preset.name}
+                                </span>
                               </button>
                             );
                           })}
@@ -734,8 +769,8 @@ export default function Settings() {
                               <input type="color" value={biz.brandColor}
                                 onChange={e => {
                                   sb('brandColor', e.target.value);
-                                  sb('brandColorName', 'Custom');
-                                  setThemeColor(e.target.value, 'Custom');
+                                  sb('brandColorName', resolveColorName(e.target.value, COLOR_PRESETS));
+                                  setThemeColor(e.target.value, resolveColorName(e.target.value, COLOR_PRESETS));
                                 }}
                                 className="opacity-0 absolute inset-0 w-full h-full cursor-pointer" />
                             </div>
@@ -748,8 +783,8 @@ export default function Settings() {
                               onChange={e => {
                                 const val = '#' + e.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6);
                                 sb('brandColor', val);
-                                sb('brandColorName', 'Custom');
-                                if (val.length === 7) setThemeColor(val, 'Custom');
+                                sb('brandColorName', resolveColorName(val, COLOR_PRESETS));
+                                if (val.length === 7) setThemeColor(val, resolveColorName(val, COLOR_PRESETS));
                               }}
                               className="input pl-[28px] font-mono text-[13px] uppercase"
                               placeholder="00236f"
@@ -768,6 +803,7 @@ export default function Settings() {
                         </div>
                       </div>
                     </div>
+                  </div>
                   </div>
                 </SectionCard>
                 <SaveBar saving={saving} onSave={saveBiz} />
@@ -929,7 +965,7 @@ export default function Settings() {
 
               {/* ══ RECEIPT ═══════════════════════════════════════════════ */}
               {active === 'receipt' && (<>
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-[16px]">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-[16px] items-start">
                   <SectionCard icon="receipt_long" title="Receipt Settings" subtitle="Customise what appears on printed receipts.">
                     <div className="space-y-[16px]">
                       <div><label className="label">Header / Greeting</label>
@@ -941,25 +977,94 @@ export default function Settings() {
                           <p className="text-[11px] text-on-surface-variant/60 mt-[2px]">Requires a logo to be uploaded in Branding.</p></div>
                         <Toggle checked={biz.receiptShowLogo} onChange={v => sb('receiptShowLogo', v)} />
                       </div>
+
+                      {/* Receipt Phone */}
+                      <div>
+                        <label className="label">Receipt Phone</label>
+                        <input value={biz.receiptPhone || ''} onChange={e => sb('receiptPhone', e.target.value)} className="input" placeholder="e.g. +254 700 000 000" />
+                      </div>
+
+                      {/* Business Address */}
+                      <div>
+                        <label className="label">Business Address</label>
+                        <textarea rows={2} value={biz.receiptAddress || ''} onChange={e => sb('receiptAddress', e.target.value)} className="input resize-none" placeholder="e.g. Tom Mboya Street, Nairobi" />
+                      </div>
+
+                      {/* Font Type */}
+                      <div>
+                        <label className="label">Font Type</label>
+                        <select value={biz.receiptFontType || 'Arial'} onChange={e => sb('receiptFontType', e.target.value)} className="input">
+                          {['Arial', 'Courier New', 'Georgia', 'Times New Roman', 'Verdana'].map(f => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Font Size */}
+                      <div>
+                        <label className="label">Font Size</label>
+                        <select value={biz.receiptFontSize || 'medium'} onChange={e => sb('receiptFontSize', e.target.value)} className="input">
+                          <option value="small">Small (10pt)</option>
+                          <option value="medium">Medium (12pt)</option>
+                          <option value="large">Large (14pt)</option>
+                        </select>
+                      </div>
+
+                      {/* Show Tax Breakdown */}
+                      <div className="flex items-center justify-between py-[12px] border-t border-black/[0.05]">
+                        <div>
+                          <p className="text-[13px] font-semibold text-on-surface">Show Tax Breakdown</p>
+                          <p className="text-[11px] text-on-surface-variant/60 mt-[2px]">Display net amount and VAT as separate line items.</p>
+                        </div>
+                        <Toggle checked={!!biz.receiptShowTaxBreakdown} onChange={v => sb('receiptShowTaxBreakdown', v)} />
+                      </div>
+
+                      {/* Show Served By */}
+                      <div className="flex items-center justify-between py-[12px] border-t border-black/[0.05]">
+                        <div>
+                          <p className="text-[13px] font-semibold text-on-surface">Show Served By</p>
+                          <p className="text-[11px] text-on-surface-variant/60 mt-[2px]">Display the cashier's name on the receipt.</p>
+                        </div>
+                        <Toggle checked={biz.receiptShowServedBy !== false} onChange={v => sb('receiptShowServedBy', v)} />
+                      </div>
+
+                      {/* Show Date & Time */}
+                      <div className="flex items-center justify-between py-[12px] border-t border-black/[0.05]">
+                        <div>
+                          <p className="text-[13px] font-semibold text-on-surface">Show Date &amp; Time</p>
+                          <p className="text-[11px] text-on-surface-variant/60 mt-[2px]">Display the sale timestamp on the receipt.</p>
+                        </div>
+                        <Toggle checked={biz.receiptShowDateTime !== false} onChange={v => sb('receiptShowDateTime', v)} />
+                      </div>
                     </div>
                   </SectionCard>
 
                   {/* Live receipt preview */}
-                  <div className="card p-[20px]">
+                  <div className="card p-[20px] sticky top-[24px]">
                     <h4 className="text-[11px] font-bold text-on-surface-variant/60 uppercase tracking-[0.08em] mb-[16px]">Live Preview</h4>
-                    <div className="max-w-[240px] mx-auto bg-white text-black p-[14px] rounded-lg shadow border border-black/[0.08] font-mono text-[9px] space-y-[6px]">
+                    <div 
+                      className="max-w-[240px] mx-auto bg-white text-black p-[14px] rounded-lg shadow border border-black/[0.08] space-y-[6px]"
+                      style={{ 
+                        fontFamily: biz.receiptFontType || 'Arial',
+                        fontSize: biz.receiptFontSize === 'small' ? '8px' : biz.receiptFontSize === 'large' ? '12px' : '10px'
+                      }}
+                    >
                       <div className="text-center space-y-[2px]">
                         {biz.logoUrl && biz.receiptShowLogo && <img src={biz.logoUrl} alt="logo" className="w-10 h-10 object-contain mx-auto mb-[4px]" />}
-                        <p className="text-[10px] font-black uppercase">{biz.name}</p>
-                        <p className="text-gray-500">{biz.address}</p>
-                        <p className="text-gray-500">Tel: {biz.phone}</p>
-                        <p className="text-gray-500">PIN: {biz.kraPin}</p>
+                        <p className="font-black uppercase" style={{ fontSize: '1.2em' }}>{biz.name}</p>
+                        <p className="text-gray-600">{biz.receiptAddress || biz.address}</p>
+                        <p className="text-gray-600">Tel: {biz.receiptPhone || biz.phone}</p>
+                        <p className="text-gray-600">PIN: {biz.kraPin}</p>
                       </div>
                       <div className="border-t border-dashed border-gray-300" />
                       <div className="space-y-[2px]">
                         <div className="flex justify-between"><span>Receipt:</span><b>POS-00042</b></div>
-                        <div className="flex justify-between"><span>Date:</span><span>{new Date().toLocaleDateString()}</span></div>
-                        <div className="flex justify-between"><span>Cashier:</span><span>Grace W.</span></div>
+                        {biz.receiptShowDateTime !== false && (
+                          <div className="flex justify-between"><span>Date:</span><span>{new Date().toLocaleDateString()}</span></div>
+                        )}
+                        {biz.receiptShowServedBy !== false && (
+                          <div className="flex justify-between"><span>Cashier:</span><span>Grace W.</span></div>
+                        )}
                       </div>
                       <div className="border-t border-dashed border-gray-300" />
                       <div className="space-y-[2px]">
@@ -968,14 +1073,20 @@ export default function Settings() {
                       </div>
                       <div className="border-t border-dashed border-gray-300" />
                       <div className="space-y-[2px]">
-                        <div className="flex justify-between"><span>Subtotal:</span><span>KES 500</span></div>
-                        <div className="flex justify-between"><span>VAT ({biz.vatRate}%):</span><span>KES {(500*biz.vatRate/100).toFixed(0)}</span></div>
-                        <div className="flex justify-between font-bold border-t border-dashed pt-[2px] mt-[2px]"><span>TOTAL:</span><span>KES {(500*(1+biz.vatRate/100)).toFixed(0)}</span></div>
+                        {biz.receiptShowTaxBreakdown && (
+                          <>
+                            <div className="flex justify-between"><span>Subtotal:</span><span>KES 500</span></div>
+                            <div className="flex justify-between"><span>VAT ({biz.vatRate}%):</span><span>KES {(500*biz.vatRate/100).toFixed(0)}</span></div>
+                          </>
+                        )}
+                        <div className="flex justify-between font-bold border-t border-dashed pt-[2px] mt-[2px]">
+                          <span>TOTAL:</span><span>KES {(500*(1+biz.vatRate/100)).toFixed(0)}</span>
+                        </div>
                       </div>
                       <div className="border-t border-dashed border-gray-300" />
-                      <div className="text-center space-y-[2px]">
-                        <p className="font-bold uppercase text-[8px]">{biz.receiptHeader}</p>
-                        <p className="text-gray-500 text-[8px]">{biz.receiptFooter}</p>
+                      <div className="text-center space-y-[2px] pt-[4px]">
+                        <p className="font-bold uppercase" style={{ fontSize: '0.9em' }}>{biz.receiptHeader}</p>
+                        <p className="text-gray-600" style={{ fontSize: '0.9em' }}>{biz.receiptFooter}</p>
                       </div>
                     </div>
                   </div>
@@ -1010,62 +1121,6 @@ export default function Settings() {
 
               {/* ══ SUPPLIERS ═════════════════════════════════════════════ */}
               {active === 'suppliers' && <SuppliersSection />}
-
-              {/* ══ PLAN ══════════════════════════════════════════════════ */}
-              {active === 'plan' && (
-                <div className="space-y-[16px] max-w-xl">
-                  {/* Current plan */}
-                  <div className="card overflow-hidden">
-                    <div className="p-[24px] bg-gradient-to-br from-primary to-blue-700 text-white relative overflow-hidden">
-                      <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10" />
-                      <div className="relative">
-                        <div className="flex items-center gap-[10px] mb-[16px]">
-                          <span className="material-symbols-outlined icon-fill text-yellow-300 text-2xl">workspace_premium</span>
-                          <div>
-                            <p className="text-[11px] text-white/60 uppercase tracking-wide">Current Plan</p>
-                            <p className="text-[20px] font-bold">{PLAN.name}</p>
-                          </div>
-                          <span className="ml-auto badge bg-white/20 text-white border-0">Active</span>
-                        </div>
-                        <p className="text-[22px] font-bold">{PLAN.price}</p>
-                        <p className="text-[12px] text-white/60 mt-[2px]">Billed monthly · Next renewal: 20 Jul 2025</p>
-                      </div>
-                    </div>
-                    <div className="p-[24px]">
-                      <div className="grid grid-cols-2 gap-[12px] mb-[20px]">
-                        <div className="p-[12px] bg-surface-container-low rounded-xl">
-                          <p className="text-[11px] text-on-surface-variant/60 uppercase tracking-wide">Users</p>
-                          <p className="text-[18px] font-bold text-on-surface">{PLAN.users}</p>
-                        </div>
-                        <div className="p-[12px] bg-surface-container-low rounded-xl">
-                          <p className="text-[11px] text-on-surface-variant/60 uppercase tracking-wide">Branches</p>
-                          <p className="text-[18px] font-bold text-on-surface">{PLAN.branches}</p>
-                        </div>
-                      </div>
-                      <div className="space-y-[8px]">
-                        {PLAN.features.map(f => (
-                          <div key={f} className="flex items-center gap-[8px]">
-                            <span className="material-symbols-outlined icon-fill text-emerald-500 flex-shrink-0" style={{fontSize:'15px'}}>check_circle</span>
-                            <span className="text-[13px] text-on-surface">{f}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  {/* Upgrade CTA */}
-                  <div className="card p-[20px] border-2 border-dashed border-outline-variant">
-                    <div className="flex items-center gap-[12px] mb-[12px]">
-                      <span className="material-symbols-outlined icon-fill text-yellow-500 text-2xl">rocket_launch</span>
-                      <div><p className="text-[14px] font-bold text-on-surface">Upgrade to Enterprise</p>
-                        <p className="text-[12px] text-on-surface-variant/60">Unlimited users, custom roles, white-labelling & dedicated support.</p>
-                      </div>
-                    </div>
-                    <button className="btn-primary w-full justify-center">
-                      <span className="material-symbols-outlined" style={{fontSize:'16px'}}>arrow_forward</span>View Enterprise Plans
-                    </button>
-                  </div>
-                </div>
-              )}
 
             </div>{/* end content space-y */}
           </div>{/* end content scroll col */}

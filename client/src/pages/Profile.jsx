@@ -22,12 +22,28 @@ export default function Profile() {
   const [loading, setLoading] = useState(false);
   const sf = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  const handleAvatarChange = (e) => {
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  const handleAvatarChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) return toast.error('Image must be under 2MB');
+    if (file.size > 5 * 1024 * 1024) return toast.error('Image must be under 5MB');
     const reader = new FileReader();
-    reader.onload = ev => setAvatar(ev.target.result);
+    reader.onload = async ev => {
+      setAvatarUploading(true);
+      try {
+        const { data } = await api.post('/upload/image', {
+          data: ev.target.result,
+          folder: 'retailedge/avatars',
+        });
+        setAvatar(data.url);
+        toast.success('Photo updated!');
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Upload failed');
+      } finally {
+        setAvatarUploading(false);
+      }
+    };
     reader.readAsDataURL(file);
   };
 
@@ -57,11 +73,11 @@ export default function Profile() {
 
   return (
     <PageLayout title="Profile" subtitle="Manage your account and credentials">
-      <div className="max-w-3xl space-y-[20px]">
+      <div className="max-w-5xl grid grid-cols-1 md:grid-cols-[280px_1fr] gap-[24px] items-start">
 
         {/* ── Top identity card ── */}
         <div className="bg-white rounded-2xl border border-black/[0.05] shadow-[0_1px_3px_rgba(0,0,0,0.07)] p-[24px]">
-          <div className="flex items-center gap-[20px]">
+          <div className="flex flex-col items-center gap-[20px] text-center">
             {/* Avatar */}
             <div className="flex-shrink-0 flex flex-col items-center gap-[8px]">
               <div className="w-[80px] h-[80px] rounded-2xl overflow-hidden bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center shadow-sm ring-2 ring-primary/20">
@@ -69,10 +85,12 @@ export default function Profile() {
                   ? <img src={avatar} alt="avatar" className="w-full h-full object-cover" />
                   : <span className="text-white font-black text-[32px]">{initials}</span>}
               </div>
-              <label className="inline-flex items-center gap-[4px] text-[11px] font-semibold text-primary bg-primary/[0.07] hover:bg-primary/[0.12] px-[10px] py-[5px] rounded-lg cursor-pointer transition-colors">
-                <span className="material-symbols-outlined" style={{fontSize:'13px'}}>photo_camera</span>
-                Change Photo
-                <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+              <label className={`inline-flex items-center gap-[4px] text-[11px] font-semibold text-primary bg-primary/[0.07] hover:bg-primary/[0.12] px-[10px] py-[5px] rounded-lg cursor-pointer transition-colors ${avatarUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                <span className="material-symbols-outlined" style={{fontSize:'13px'}}>
+                  {avatarUploading ? 'progress_activity' : 'photo_camera'}
+                </span>
+                {avatarUploading ? 'Uploading…' : 'Change Photo'}
+                <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} disabled={avatarUploading} />
               </label>
               {avatar && (
                 <button type="button" onClick={() => setAvatar('')}
@@ -83,14 +101,14 @@ export default function Profile() {
             </div>
 
             {/* Info */}
-            <div className="flex-1 min-w-0">
+            <div className="w-full min-w-0 pt-[8px] border-t border-black/[0.05]">
               <h2 className="text-[18px] font-bold text-on-surface leading-tight truncate">{user?.name}</h2>
               <p className="text-[13px] text-on-surface-variant/60 font-mono mt-[2px] truncate">{user?.email}</p>
-              <div className="flex items-center gap-[8px] mt-[8px] flex-wrap">
+              <div className="flex items-center justify-center gap-[8px] mt-[16px] flex-wrap">
                 <span className={`badge ${ROLE_STYLE[user?.role] || 'badge-gray'}`}>{user?.role}</span>
                 <span className="badge badge-green">Active</span>
                 {user?.branch && (
-                  <span className="inline-flex items-center gap-[4px] text-[11px] text-on-surface-variant/60">
+                  <span className="inline-flex items-center justify-center w-full mt-[8px] gap-[4px] text-[11px] text-on-surface-variant/60">
                     <span className="material-symbols-outlined" style={{fontSize:'13px'}}>location_on</span>
                     {user.branch}
                   </span>
