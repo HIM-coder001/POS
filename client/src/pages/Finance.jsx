@@ -1,12 +1,414 @@
 import { useState, useEffect } from 'react';
-import { PageLayout } from '../components/ui';
+import { PageLayout, EmptyState, SkeletonRows, Modal } from '../components/ui';
+import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
 const fmt = (n) => `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 
+/**
+ * Pure validation function for the purchase form.
+ * Returns an errors object; keys are only present when the field is invalid.
+ * An empty returned object means the form is valid.
+ *
+ * @param {{ supplierId: string, items: Array<{productName: string, quantity: number, unitCost: number}>, purchaseDate: string }} form
+ * @returns {{ supplier?: string, items?: string, purchaseDate?: string }}
+ */
+export function validatePurchaseForm(form) {
+  const errors = {};
+
+  if (!form.supplierId || String(form.supplierId).trim() === '') {
+    errors.supplier = 'Supplier is required';
+  }
+
+  if (!Array.isArray(form.items) || form.items.length === 0) {
+    errors.items = 'At least one item is required';
+  } else {
+    for (let i = 0; i < form.items.length; i++) {
+      const item = form.items[i];
+      if (!item.productName || String(item.productName).trim() === '') {
+        errors.items = `Item ${i + 1}: product name is required`;
+        break;
+      }
+      if (!Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1) {
+        errors.items = `Item ${i + 1}: quantity must be an integer ≥ 1`;
+        break;
+      }
+      if (Number(item.unitCost) <= 0 || isNaN(Number(item.unitCost))) {
+        errors.items = `Item ${i + 1}: unit cost must be > 0`;
+        break;
+      }
+    }
+  }
+
+  if (!form.purchaseDate || String(form.purchaseDate).trim() === '') {
+    errors.purchaseDate = 'Purchase date is required';
+  }
+
+  return errors;
+}
+
+function PurchasesTab() {
+  const { user } = useAuth();
+  const [purchases, setPurchases] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [suppliers, setSuppliers] = useState([]);
+  const [suppliersLoading, setSuppliersLoading] = useState(false);
+  const [suppliersError, setSuppliersError] = useState(null);
+  const [form, setForm] = useState({
+    supplierId: '',
+    items: [{ productName: '', quantity: 1, unitCost: '' }],
+    purchaseDate: '',
+  });
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+
+  const canWrite = user?.role === 'admin' || user?.role === 'manager';
+
+  useEffect(() => {
+    api.get('/purchases')
+      .then(({ data }) => setPurchases(data))
+      .catch(() => toast.error('Failed to load purchases'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Fetch suppliers when the form is opened
+  const fetchSuppliers = async () => {
+    setSuppliersLoading(true);
+    setSuppliersError(null);
+    try {
+      const { data } = await api.get('/suppliers');
+      // API returns sorted by name, but ensure alphabetical order
+      const sorted = [...data].sort((a, b) =>
+        a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+      );
+      setSuppliers(sorted);
+    } catch (err) {
+      setSuppliersError(err.response?.data?.message || 'Failed to load suppliers');
+    } finally {
+      setSuppliersLoading(false);
+    }
+  };
+
+  const openForm = () => {
+    setShowForm(true);
+    fetchSuppliers();
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setForm({ supplierId: '', items: [{ productName: '', quantity: 1, unitCost: '' }], purchaseDate: '' });
+    setFieldErrors({});
+  };
+
+  const handleBlur = (field) => {
+    const errs = validatePurchaseForm(form);
+    setFieldErrors((prev) => ({ ...prev, [field]: errs[field] }));
+  };
+
+  const updateItem = (index, key, value) => {
+    setForm((prev) => ({
+      ...prev,
+      items: prev.items.map((item, i) =>
+        i === index ? { ...item, [key]: value } : item
+      ),
+    }));
+  };
+
+  const addItem = () => {
+    setForm((prev) => ({
+      ...prev,
+      items: [...prev.items, { productName: '', quantity: 1, unitCost: '' }],
+    }));
+  };
+
+  const removeItem = (index) => {
+    if (form.items.length <= 1) return;
+    setForm((prev) => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const errs = validatePurchaseForm(form);
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const payload = {
+        supplier: form.supplierId,
+        items: form.items.map((it) => ({
+          productName: it.productName.trim(),
+          quantity: Number(it.quantity),
+          unitCost: Number(it.unitCost),
+        })),
+        purchaseDate: form.purchaseDate,
+      };
+      const { data } = await api.post('/purchases', payload);
+      setPurchases((prev) => [data, ...prev]);
+      toast.success('Purchase recorded');
+      closeForm();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to record purchase');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-gutter">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-title-md font-bold text-on-surface">Purchase Orders</h2>
+        {canWrite && (
+          <button
+            onClick={openForm}
+            className="btn-primary flex items-center gap-sm"
+          >
+            <span className="material-symbols-outlined text-base">add</span>
+            New Purchase
+          </button>
+        )}
+      </div>
+
+      {/* Purchases table card */}
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="table-head">
+              <tr>
+                <th className="px-lg py-md">Date</th>
+                <th className="px-lg py-md">Supplier</th>
+                <th className="px-lg py-md text-center">Items</th>
+                <th className="px-lg py-md text-right">Total Cost</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-black/[0.04] text-body-sm">
+              {loading ? (
+                <SkeletonRows count={5} cols={4} />
+              ) : purchases.length === 0 ? (
+                <tr>
+                  <td colSpan={4}>
+                    <EmptyState
+                      icon="receipt_long"
+                      title="No purchases yet"
+                      message={canWrite ? 'Click "New Purchase" to record your first purchase order.' : 'No purchase orders have been recorded yet.'}
+                    />
+                  </td>
+                </tr>
+              ) : (
+                purchases.map((p) => (
+                  <tr key={p._id} className="table-row">
+                    <td className="px-lg py-md font-sans text-[12px] text-on-surface-variant">
+                      {p.purchaseDate
+                        ? new Date(p.purchaseDate).toLocaleDateString('en-KE', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: '2-digit',
+                          })
+                        : '—'}
+                    </td>
+                    <td className="px-lg py-md font-semibold">
+                      {p.supplier?.name ?? p.supplierName ?? '—'}
+                    </td>
+                    <td className="px-lg py-md text-center text-on-surface-variant">
+                      {Array.isArray(p.items) ? p.items.length : '—'}
+                    </td>
+                    <td className="px-lg py-md text-right font-mono font-bold">
+                      {fmt(p.totalCost)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Purchase form modal */}
+      <Modal open={showForm} onClose={closeForm} title="New Purchase Order" width="max-w-2xl">
+        <form onSubmit={handleSubmit} className="space-y-md">
+          {/* Supplier dropdown */}
+          <div>
+            <label className="label">
+              Supplier <span className="text-error">*</span>
+            </label>
+            {suppliersLoading ? (
+              <div className="flex items-center gap-sm py-sm text-on-surface-variant text-body-sm">
+                <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
+                Loading suppliers…
+              </div>
+            ) : suppliersError ? (
+              <div className="flex items-center gap-sm p-sm bg-error-container/20 border border-error-container rounded-lg text-body-sm">
+                <span className="material-symbols-outlined text-error text-base">error</span>
+                <span className="flex-1 text-on-surface">{suppliersError}</span>
+                <button
+                  type="button"
+                  onClick={fetchSuppliers}
+                  className="btn-secondary text-xs py-unit px-sm"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <select
+                className="input"
+                value={form.supplierId}
+                onChange={(e) => setForm((p) => ({ ...p, supplierId: e.target.value }))}
+                onBlur={() => handleBlur('supplier')}
+                disabled={suppliers.length === 0}
+              >
+                <option value="">
+                  {suppliers.length === 0 ? 'No suppliers available' : 'Select a supplier…'}
+                </option>
+                {suppliers.map((s) => (
+                  <option key={s._id} value={s._id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {fieldErrors.supplier && (
+              <p className="text-xs text-error mt-unit">{fieldErrors.supplier}</p>
+            )}
+          </div>
+
+          {/* Dynamic line items */}
+          <div>
+            <label className="label">Line Items <span className="text-error">*</span></label>
+            <div className="space-y-sm">
+              {form.items.map((item, idx) => (
+                <div key={idx} className="flex items-start gap-sm p-sm bg-surface-container/40 rounded-lg">
+                  <div className="flex-1 space-y-xs">
+                    <input
+                      className="input"
+                      placeholder="Product name"
+                      value={item.productName}
+                      onChange={(e) => updateItem(idx, 'productName', e.target.value)}
+                      onBlur={() => handleBlur('items')}
+                    />
+                  </div>
+                  <div className="w-24">
+                    <input
+                      type="number"
+                      className="input text-center"
+                      placeholder="Qty"
+                      min="1"
+                      step="1"
+                      value={item.quantity}
+                      onChange={(e) => updateItem(idx, 'quantity', e.target.value)}
+                      onBlur={() => handleBlur('items')}
+                    />
+                  </div>
+                  <div className="w-32">
+                    <input
+                      type="number"
+                      className="input"
+                      placeholder="Unit cost"
+                      min="0.01"
+                      step="0.01"
+                      value={item.unitCost}
+                      onChange={(e) => updateItem(idx, 'unitCost', e.target.value)}
+                      onBlur={() => handleBlur('items')}
+                    />
+                  </div>
+                  <div className="w-24 text-right font-mono text-body-sm font-semibold pt-sm text-on-surface-variant">
+                    {item.quantity && item.unitCost
+                      ? fmt(Number(item.quantity) * Number(item.unitCost))
+                      : '—'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeItem(idx)}
+                    disabled={form.items.length <= 1}
+                    className="btn-icon text-error/60 hover:text-error hover:bg-error/10 disabled:opacity-30 mt-unit"
+                    title="Remove item"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>close</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+            {fieldErrors.items && (
+              <p className="text-xs text-error mt-unit">{fieldErrors.items}</p>
+            )}
+            <button
+              type="button"
+              onClick={addItem}
+              className="mt-sm text-body-sm text-primary font-semibold hover:underline flex items-center gap-unit"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>add</span>
+              Add line item
+            </button>
+          </div>
+
+          {/* Purchase date */}
+          <div>
+            <label className="label">
+              Purchase Date <span className="text-error">*</span>
+            </label>
+            <input
+              type="date"
+              className="input"
+              value={form.purchaseDate}
+              onChange={(e) => setForm((p) => ({ ...p, purchaseDate: e.target.value }))}
+              onBlur={() => handleBlur('purchaseDate')}
+            />
+            {fieldErrors.purchaseDate && (
+              <p className="text-xs text-error mt-unit">{fieldErrors.purchaseDate}</p>
+            )}
+          </div>
+
+          {/* Computed total */}
+          {form.items.some((it) => it.unitCost && it.quantity) && (
+            <div className="flex justify-between items-center p-md bg-surface-container rounded-lg">
+              <span className="text-body-sm font-semibold text-on-surface">Estimated Total</span>
+              <span className="font-mono font-bold text-primary">
+                {fmt(
+                  form.items.reduce(
+                    (sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitCost) || 0),
+                    0
+                  )
+                )}
+              </span>
+            </div>
+          )}
+
+          {/* Submit / Cancel */}
+          <div className="flex gap-sm pt-sm">
+            <button
+              type="button"
+              onClick={closeForm}
+              className="btn-secondary flex-1 justify-center"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || suppliersLoading || suppliers.length === 0}
+              className="btn-primary flex-1 justify-center"
+            >
+              {submitting ? (
+                <span className="material-symbols-outlined animate-spin">progress_activity</span>
+              ) : (
+                'Save Purchase'
+              )}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
+}
+
 export default function Finance() {
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('reconciliation');
   const [stats, setStats] = useState({
     totalSales: 0,
     cashSales: 0,
@@ -163,6 +565,32 @@ export default function Finance() {
 
   return (
     <PageLayout title="Finance" subtitle="Daily cash reconciliation and register audit">
+      {/* Tab Bar */}
+      <div className="flex gap-xs border-b border-black/[0.06] mb-lg">
+        <button
+          onClick={() => setActiveTab('reconciliation')}
+          className={`px-lg py-md text-body-sm font-semibold transition-colors border-b-2 -mb-px ${
+            activeTab === 'reconciliation'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-on-surface-variant hover:text-on-surface'
+          }`}
+        >
+          Reconciliation
+        </button>
+        <button
+          onClick={() => setActiveTab('purchases')}
+          className={`px-lg py-md text-body-sm font-semibold transition-colors border-b-2 -mb-px ${
+            activeTab === 'purchases'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-on-surface-variant hover:text-on-surface'
+          }`}
+        >
+          Purchases
+        </button>
+      </div>
+
+      {activeTab === 'reconciliation' && (
+      <>
       {loading ? (
         <div className="flex items-center justify-center py-2xl">
           <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
@@ -364,6 +792,10 @@ export default function Finance() {
             </table>
           </div>
         </div>
-      </PageLayout>
+      </>
+      )}
+
+      {activeTab === 'purchases' && <PurchasesTab />}
+    </PageLayout>
   );
 }

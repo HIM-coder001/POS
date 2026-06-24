@@ -30,14 +30,16 @@ const navCategories = [
   {
     title: 'Finance',
     items: [
-      { to: '/reports',  icon: 'analytics',    label: 'Reports',   roles: ['admin', 'manager'] },
+      { to: '/reports',   icon: 'analytics',          label: 'Reports',  roles: ['admin', 'manager'] },
+      { to: '/expenses',  icon: 'money_off',           label: 'Expenses', roles: ['admin', 'manager'] },
     ]
   },
   {
     title: 'System',
     items: [
-      { to: '/profile',  icon: 'account_circle', label: 'Profile',  roles: ['admin', 'manager', 'cashier'] },
-      { to: '/settings', icon: 'settings',       label: 'Settings', roles: ['admin', 'manager'] },
+      { to: '/profile',  icon: 'account_circle',   label: 'Profile',  roles: ['admin', 'manager', 'cashier'] },
+      { to: '/settings', icon: 'settings',         label: 'Settings', roles: ['admin', 'manager'] },
+      { to: '/plans',    icon: 'workspace_premium', label: 'Plans',    roles: ['admin'] },
     ]
   }
 ];
