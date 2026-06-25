@@ -1,5 +1,6 @@
 const winston = require('winston');
 const path = require('path');
+const { isProduction, getNodeEnv } = require('../config/runtime');
 
 const { combine, timestamp, printf, colorize, errors } = winston.format;
 
@@ -8,7 +9,7 @@ const logFormat = printf(({ level, message, timestamp, stack }) => {
 });
 
 const logger = winston.createLogger({
-  level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+  level: isProduction() ? 'info' : 'debug',
   format: combine(
     timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
     errors({ stack: true }),
@@ -17,7 +18,7 @@ const logger = winston.createLogger({
   transports: [
     // Always log to console (colorized in dev, plain in prod)
     new winston.transports.Console({
-      format: process.env.NODE_ENV === 'production'
+      format: isProduction()
         ? combine(timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }), errors({ stack: true }), logFormat)
         : combine(colorize(), timestamp({ format: 'HH:mm:ss' }), errors({ stack: true }), logFormat),
     }),
@@ -25,7 +26,7 @@ const logger = winston.createLogger({
 });
 
 // In production, also write to log files
-if (process.env.NODE_ENV === 'production') {
+if (isProduction()) {
   logger.add(new winston.transports.File({
     filename: path.join(__dirname, '../logs/error.log'),
     level: 'error',
