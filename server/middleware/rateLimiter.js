@@ -1,4 +1,5 @@
 const rateLimit = require('express-rate-limit');
+const { isProduction } = require('../config/runtime');
 
 /**
  * Strict limiter for authentication endpoints.
@@ -13,6 +14,7 @@ const authLimiter = rateLimit({
     message: 'Too many login attempts. Please wait 15 minutes before trying again.',
   },
   skipSuccessfulRequests: true, // only count failed attempts
+  skip: () => !isProduction(),
 });
 
 /**
@@ -27,6 +29,7 @@ const mpesaLimiter = rateLimit({
   message: {
     message: 'Too many M-Pesa requests. Please wait an hour before trying again.',
   },
+  skip: () => !isProduction(),
 });
 
 /**
@@ -39,6 +42,7 @@ const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Too many requests. Please slow down.' },
+  skip: () => !isProduction(),
 });
 
 module.exports = { authLimiter, mpesaLimiter, generalLimiter };
